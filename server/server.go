@@ -1,20 +1,18 @@
 package server
 
 import (
-	"fmt"
+	"io"
 	"log/slog"
 	"net"
-
-	"github.com/muhammadolammi/tinydb/peer"
 )
 
 func NewServer(listerAddr string) *Server {
 	return &Server{
-		ListerAddr:  listerAddr,
-		peers:       make(map[net.Addr]*peer.Peer),
-		addPeerChan: make(chan *peer.Peer),
-		quitChan:    make(chan struct{}),
-		MsgChan:     make(chan []byte),
+		ListerAddr: listerAddr,
+		// peers:       make(map[net.Addr]*peer.Peer),
+		// addPeerChan: make(chan *peer.Peer),
+		quitChan: make(chan struct{}),
+		MsgChan:  make(chan []byte),
 	}
 }
 
@@ -32,13 +30,11 @@ func (s *Server) Start() error {
 func (s *Server) loop() {
 	for {
 		select {
-		case peer := <-s.addPeerChan:
-			s.peers[s.ln.Addr()] = peer
+
 		case rawMsg := <-s.MsgChan:
-			fmt.Println(rawMsg)
+			s.handleRawMessage(rawMsg)
 		case <-s.quitChan:
 			return
-
 			// default:
 			// 	time.Sleep(10 * time.Second)
 			// 	log.Println("default peer looping")
@@ -54,17 +50,41 @@ func (s *Server) acceptLoop() error {
 			slog.Info("accept error", "err", err)
 			continue
 		}
-		go s.handleConn(conn)
+		s.Conn = conn
+		go s.readLoop()
 	}
 }
 
-func (s *Server) handleConn(conn net.Conn) {
-	peer := peer.NewPeer(conn, s.MsgChan)
-	s.addPeerChan <- peer
-	slog.Info("new peer added", "remoteAddr", conn.RemoteAddr())
+func (s *Server) readLoop() {
+	buff := make([]byte, 1024)
+	for {
+		n, err := s.Conn.Read(buff)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			slog.Info("read loop error.", "error", err)
 
-	err := peer.ReadLoop()
-	if err != nil {
-		slog.Info("peer read error.", "error", err, "remoteAddr", conn.RemoteAddr())
+		}
+		msgBuf := make([]byte, n)
+		copy(msgBuf, buff)
+		// fmt.Println(msgBuf)
+		s.MsgChan <- msgBuf
 	}
+}
+
+// func (s *Server) handleConn() {
+// 	peer := peer.NewPeer(conn, s.MsgChan)
+// 	s.addPeerChan <- peer
+// 	slog.Info("new peer added", "remoteAddr", conn.RemoteAddr())
+
+// 	peer.ReadLoop()
+// 	if err != nil {
+// 		slog.Info("read loop error.", "error", err, "remoteAddr", s.Conn.RemoteAddr())
+// 	}
+// }
+
+func (s *Server) handleRawMessage(rawMsg []byte) {
+	s.Conn.Write([]byte("+OK\r\n"))
+
 }
