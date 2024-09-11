@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"net"
@@ -32,7 +33,7 @@ func (s *Server) loop() {
 		select {
 
 		case rawMsg := <-s.MsgChan:
-			s.handleRawMessage(rawMsg)
+			s.handleRawMessage(bytes.NewReader(rawMsg))
 		case <-s.quitChan:
 			return
 			// default:
@@ -84,7 +85,7 @@ func (s *Server) readLoop() {
 // 	}
 // }
 
-func (s *Server) handleRawMessage(rawMsg []byte) {
+func (s *Server) handleRawMessage(r io.Reader) {
 	s.Conn.Write([]byte("+OK\r\n"))
 
 }
