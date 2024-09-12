@@ -2,4 +2,4 @@ package protocol
 
 import "errors"
 
-var WrongCommandType = errors.New("")
+var UnkownCommandError = errors.New("unkown command")
