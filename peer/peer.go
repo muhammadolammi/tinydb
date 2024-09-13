@@ -4,7 +4,7 @@ import (
 	"net"
 )
 
-func NewPeer(conn net.Conn, msgChan chan []byte) *Peer {
+func NewPeer(conn net.Conn, msgChan chan Message) *Peer {
 	return &Peer{
 		Conn:    conn,
 		MsgChan: msgChan,
@@ -21,6 +21,10 @@ func (p *Peer) ReadLoop() error {
 		msgBuf := make([]byte, n)
 		copy(msgBuf, buff)
 		// fmt.Println(msgBuf)
-		p.MsgChan <- msgBuf
+		message := Message{
+			Data:     msgBuf,
+			PeerAddr: p.Conn.RemoteAddr().String(),
+		}
+		p.MsgChan <- message
 	}
 }

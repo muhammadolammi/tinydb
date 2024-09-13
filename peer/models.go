@@ -1,8 +1,15 @@
 package peer
 
-import "net"
+import (
+	"net"
+)
 
+type Message struct {
+	Data     []byte
+	PeerAddr string
+}
 type Peer struct {
 	Conn    net.Conn
-	MsgChan chan []byte
+	MsgChan chan Message
+	// Memory  memory.Memory
 }

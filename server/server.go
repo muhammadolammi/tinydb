@@ -9,6 +9,7 @@ import (
 	"net"
 	"strings"
 
+	"github.com/muhammadolammi/tinydb/peer"
 	"github.com/muhammadolammi/tinydb/protocol"
 )
 
@@ -29,10 +30,18 @@ func (s *Server) loop() {
 	for {
 		select {
 
-		case rawMsg := <-s.MsgChan:
-			s.handleRawMessage(bytes.NewReader(rawMsg))
+		case msg := <-s.MsgChan:
+			p := s.peers[msg.PeerAddr]
+			s.handleRawMessage(bytes.NewReader(msg.Data), *p)
 		case aofrawMsg := <-s.AOFMsgChan:
 			s.handleAOFRawMessage(bytes.NewReader(aofrawMsg))
+		case peer := <-s.addPeerChan:
+			s.peers[peer.Conn.RemoteAddr().String()] = peer
+			slog.Info("new peer added", "remoteAddr", peer.Conn.RemoteAddr())
+		case peer := <-s.removePeerChan:
+			delete(s.peers, peer.Conn.RemoteAddr().String())
+			slog.Info("peer removed", "remoteAddr", peer.Conn.RemoteAddr())
+
 		case <-s.quitChan:
 			return
 			// default:
@@ -55,43 +64,43 @@ func (s *Server) acceptLoop() error {
 	}
 }
 
-func (s *Server) readLoop() {
-	buff := make([]byte, 1024)
-	for {
-		n, err := s.Conn.Read(buff)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			slog.Info("read loop error.", "error", err)
+// func (s *Server) readLoop() {
+// 	buff := make([]byte, 1024)
+// 	for {
+// 		n, err := s.Conn.Read(buff)
+// 		if err != nil {
+// 			if err == io.EOF {
+// 				break
+// 			}
+// 			slog.Info("read loop error.", "error", err)
 
-		}
-		msgBuf := make([]byte, n)
-		copy(msgBuf, buff)
-		// fmt.Println(msgBuf)
-		s.MsgChan <- msgBuf
-	}
-}
+// 		}
+// 		msgBuf := make([]byte, n)
+// 		copy(msgBuf, buff)
+// 		// fmt.Println(msgBuf)
+// 		s.MsgChan <- msgBuf
+// 	}
+// }
 
 func (s *Server) handleConn(conn net.Conn) {
-	// peer := peer.NewPeer(conn, s.MsgChan)
-	// s.addPeerChan <- peer
-	// slog.Info("new peer added", "remoteAddr", conn.RemoteAddr())
+	peer := peer.NewPeer(conn, s.MsgChan)
+	s.addPeerChan <- peer
 
-	// peer.ReadLoop()
-	// if err != nil {
-	// 	slog.Info("read loop error.", "error", err, "remoteAddr", s.Conn.RemoteAddr())
-	// }
+	err := peer.ReadLoop()
+	if err != nil {
+		if err == io.EOF {
+			s.removePeerChan <- peer
+			return
+		}
+
+		slog.Info("read loop error.", "error", err, "remoteAddr", peer.Conn.RemoteAddr())
+	}
 
 	// lets read from the loop
-	s.Conn = conn
-	// go s.readAOFAndSendToChannel()
-	s.readLoop()
-
-	defer s.Conn.Close()
+	defer peer.Conn.Close()
 }
 
-func (s *Server) handleRawMessage(r io.Reader) {
+func (s *Server) handleRawMessage(r io.Reader, peer peer.Peer) {
 	resp := protocol.NewResp(r)
 
 	// check if the reader is an array or not
@@ -113,7 +122,7 @@ func (s *Server) handleRawMessage(r io.Reader) {
 	args := value.Array[1:]
 	// fmt.Println(args)
 
-	writer := protocol.NewRespWriter(s.Conn)
+	writer := protocol.NewRespWriter(peer.Conn)
 
 	handler, ok := s.Memory.Handlers[command]
 	if !ok {
@@ -124,7 +133,10 @@ func (s *Server) handleRawMessage(r io.Reader) {
 	}
 	// lets save commands to memory
 	if command == "SET" || command == "HSET" {
-		s.Aof.Write(*value)
+		err = s.Aof.Write(*value)
+		if err != nil {
+			log.Println("error writing to aof", "error", err)
+		}
 	}
 	result := handler(args)
 	writer.Write(result)
@@ -159,34 +171,31 @@ func (s *Server) handleAOFRawMessage(r io.Reader) {
 
 	if err != nil {
 		log.Println("raw message error", "err", err)
-		s.quitChan <- struct{}{}
+		return
 	}
 	if value.Typ != "array" {
 		log.Println("Invalid request, expected array")
+
+		return
 
 	}
 
 	if len(value.Array) == 0 {
 		log.Println("Invalid request, expected array length > 0")
+		return
 	}
 	command := strings.ToUpper(value.Array[0].Bulk)
 	args := value.Array[1:]
 	// fmt.Println(args)
 
-	writer := protocol.NewRespWriter(s.Conn)
-
 	handler, ok := s.Memory.Handlers[command]
 	if !ok {
 		errString := fmt.Sprintf("Invalid command: %s", command)
-		writer.Write(&protocol.Value{Typ: "error", Str: errString})
+		// writer.Write(&protocol.Value{Typ: "error", Str: errString})
+		log.Println(errString)
 		return
 
 	}
-	// // lets save commands to memory
-	// if command == "SET" || command == "HSET" {
-	// 	s.Aof.Write(*value)
-	// }
-	_ = handler(args)
-	// writer.Write(result)
 
+	_ = handler(args)
 }

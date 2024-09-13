@@ -27,7 +27,7 @@ func (v Value) Marshal() []byte {
 	case "error":
 		return v.marshallError()
 	default:
-		return []byte{}
+		return []byte("-ERR Unknown type\r\n")
 	}
 }
 
@@ -41,6 +41,9 @@ func (v Value) marshalString() []byte {
 }
 
 func (v Value) marshalBulk() []byte {
+	if v.Bulk == "" {
+		return []byte("$-1\r\n") // Return Redis Null bulk string representation
+	}
 	var bytes []byte
 	bytes = append(bytes, BULK)
 	bytes = append(bytes, strconv.Itoa(len(v.Bulk))...)
