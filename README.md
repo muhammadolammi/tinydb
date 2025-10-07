@@ -15,7 +15,7 @@ It provides a simple TCP server that understands a subset of Redis-style command
 - 📡 **Peer System (WIP)** — planned cluster support for multiple nodes.
 
 ---
-
+<!-- 
 ## 🏗️ Project Structure
 
 tinydb/
@@ -44,7 +44,7 @@ tinydb/
 
 
 
----
+--- -->
 
 ## ⚙️ Installation
 
