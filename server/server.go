@@ -14,6 +14,7 @@ import (
 )
 
 func (s *Server) Start() error {
+
 	ln, err := net.Listen("tcp", s.ListerAddr)
 	if err != nil {
 		return err
@@ -44,9 +45,6 @@ func (s *Server) loop() {
 
 		case <-s.quitChan:
 			return
-			// default:
-			// 	time.Sleep(10 * time.Second)
-			// 	log.Println("default peer looping")
 
 		}
 	}
@@ -63,24 +61,6 @@ func (s *Server) acceptLoop() error {
 		go s.handleConn(conn)
 	}
 }
-
-// func (s *Server) readLoop() {
-// 	buff := make([]byte, 1024)
-// 	for {
-// 		n, err := s.Conn.Read(buff)
-// 		if err != nil {
-// 			if err == io.EOF {
-// 				break
-// 			}
-// 			slog.Info("read loop error.", "error", err)
-
-// 		}
-// 		msgBuf := make([]byte, n)
-// 		copy(msgBuf, buff)
-// 		// fmt.Println(msgBuf)
-// 		s.MsgChan <- msgBuf
-// 	}
-// }
 
 func (s *Server) handleConn(conn net.Conn) {
 	peer := peer.NewPeer(conn, s.MsgChan)
